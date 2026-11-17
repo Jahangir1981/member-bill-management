@@ -7,7 +7,7 @@ header{background:var(--navy);color:#fff;padding:16px max(16px,calc((100% - 1180
 main{max-width:1180px;margin:20px auto;padding:0 16px}.notice{background:#fff8e8;color:#80530b;border:1px solid #f1dfb8;padding:10px 13px;border-radius:10px;font-size:12px;margin-bottom:15px}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.stat,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:15px}.stat span{font-size:12px;color:var(--muted)}.stat strong{display:block;font-size:23px;margin-top:5px}.stat.green strong{color:var(--green)}.stat.red strong{color:var(--red)}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.toolbar input{flex:1;min-width:190px}.toolbar select{width:auto;min-width:145px}
-.panel{padding:0;overflow:hidden;margin-bottom:16px}.panel-title{padding:15px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}.panel-title h2{font-size:17px;margin:0}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:820px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px}th{background:#f8faff;color:#596579;font-size:12px}td b{font-weight:700}.pill{border-radius:30px;padding:4px 8px;font-size:12px;font-weight:700}.paid{background:#e7f7ef;color:#087a53}.due{background:#fff1e8;color:#a65a08}.not-billed{background:#eaf0ff;color:#2846a2}.actions{display:flex;gap:5px}.actions button{font-size:12px;padding:7px 9px}.empty{text-align:center;color:var(--muted);padding:28px}
+.panel{padding:0;overflow:hidden;margin-bottom:16px}.panel-title{padding:15px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px}.panel-title h2{font-size:17px;margin:0}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:820px}th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px}th{background:#f8faff;color:#596579;font-size:12px}td b{font-weight:700}.pill{border-radius:30px;padding:4px 8px;font-size:12px;font-weight:700}.paid{background:#e7f7ef;color:#087a53}.due{background:#fff1e8;color:#a65a08}.not-billed{background:#eaf2ff;color:#2457a6}.actions{display:flex;gap:5px}.actions button{font-size:12px;padding:7px 9px}.empty{text-align:center;color:var(--muted);padding:28px}
 .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px}.formgrid .field{margin:0}.full{grid-column:1/-1}.panel-foot{padding:12px 16px;color:var(--muted);font-size:12px}
 dialog{border:0;border-radius:15px;padding:0;width:min(470px,calc(100% - 24px));box-shadow:0 20px 70px #10182855}dialog::backdrop{background:#10182888}.modal{padding:20px}.modal h2{margin:0 0 12px;font-size:19px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 @media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}header{padding:14px}.brand{font-size:17px}.formgrid{grid-template-columns:1fr}.full{grid-column:auto}.stat strong{font-size:20px}}
@@ -53,22 +53,18 @@ function paidFor(id){return db.payments.filter(p=>p.memberId===id&&p.period===cu
 function totalPaidFor(id){return db.payments.filter(p=>p.memberId===id).reduce((s,p)=>s+Number(p.amount||0),0)}
 function monthKey(y,m){return y+'-'+String(m+1).padStart(2,'0')}
 function billCycleCount(m){
- // Count each monthly bill only after that month's personal due day.
  const today=new Date(), nowKey=monthKey(today.getFullYear(),today.getMonth());
  const baseKey=(m.month&&/^\d{4}-\d{2}$/.test(m.month))?m.month:((m.dueDate||nowKey).slice(0,7));
  if(baseKey>nowKey)return 0;
  const day=Number((m.dueDate||'').slice(8,10))||1;
  const [by,bm]=baseKey.split('-').map(Number);
  const months=(today.getFullYear()-by)*12+(today.getMonth()+1-bm);
- if(months<0)return 0;
+ if(months<=0)return 0;
  const lastDay=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
- const dueDay=Math.min(day,lastDay);
- // Past months are counted; add this month only when its due day has arrived.
- return Math.max(0,months+(today.getDate()>=dueDay?1:0));
+ return today.getDate()<Math.min(day,lastDay)?months-1:months;
 }
 function dueFor(m){return Math.max(0,Number(m.previousDue||0)+Number(m.fee||0)*billCycleCount(m)-totalPaidFor(m.id))}
-// Previous outstanding balances remain due even before the next monthly due date.
-function isDueNow(m){return dueFor(m)>0}
+function isDueNow(m){return billCycleCount(m)>0&&dueFor(m)>0}
 function displayDueDate(m){
  const today=new Date(),day=Number((m.dueDate||'').slice(8,10))||1;
  let y=today.getFullYear(),mo=today.getMonth();
@@ -78,7 +74,7 @@ function displayDueDate(m){
 function render(){let paid=db.payments.filter(p=>p.period===currentMonth).reduce((s,p)=>s+Number(p.amount),0),due=db.members.reduce((s,m)=>s+(isDueNow(m)?dueFor(m):0),0);$('total').textContent=db.members.length.toLocaleString('bn-BD');$('paid').textContent=money(paid);$('due').textContent=money(due);$('cleared').textContent=db.members.filter(m=>dueFor(m)===0).length.toLocaleString('bn-BD');
 let q=$('search').value.toLowerCase(),f=$('filter').value,list=db.members.filter(m=>([m.id,m.name,m.phone,m.address].join(' ').toLowerCase().includes(q))&&(f==='all'||(f==='due'?isDueNow(m):dueFor(m)===0))).sort((a,b)=>a.id.localeCompare(b.id,undefined,{numeric:true}));
 $('count').textContent=list.length+' জন';$('empty').classList.toggle('hidden',list.length>0);
-$('rows').innerHTML=list.map(m=>{let p=paidFor(m.id),old=Number(m.previousDue||0),d=dueFor(m);return `<tr><td><b>${esc(m.id)}</b><br>${esc(m.name)}</td><td style="min-width:240px;white-space:normal">${esc(m.address||'ঠিকানা দেওয়া নেই')}</td><td>${esc(m.phone||'—')}</td><td>${money(old)}</td><td>${money(m.fee)}</td><td>${money(p)}</td><td><span class="pill ${d===0?'paid':(isDueNow(m)?'due':'not-billed')}" style="display:inline-block!important;padding:5px 11px!important;border-radius:20px!important;font-weight:800!important;${d===0?'background-color:#d1fae5!important;color:#065f46!important;border:1px solid #059669!important;':(isDueNow(m)?'background-color:#ffedd5!important;color:#9a3412!important;border:1px solid #ea580c!important;':'background-color:#dbeafe!important;color:#1e40af!important;border:1px solid #2563eb!important;')}">${d===0?'পরিশোধ হয়েছে':(isDueNow(m)?'Due · '+money(d):'বিল হয়নি')}</span></td><td>${esc(displayDueDate(m))}</td><td><div class="actions"><button class="green" onclick="openPay('${encodeURIComponent(m.id)}')" ${d===0?'disabled':''}>জমা</button>${activeRole==='admin'?`<button class="secondary" onclick="editMember('${encodeURIComponent(m.id)}')">Edit</button><button class="danger" onclick="deleteMember('${encodeURIComponent(m.id)}')">Delete</button>`:''}</div></td></tr>`}).join('');
+$('rows').innerHTML=list.map(m=>{let p=paidFor(m.id),old=Number(m.previousDue||0),d=dueFor(m);return `<tr><td><b>${esc(m.id)}</b><br>${esc(m.name)}</td><td style="min-width:240px;white-space:normal">${esc(m.address||'ঠিকানা দেওয়া নেই')}</td><td>${esc(m.phone||'—')}</td><td>${money(old)}</td><td>${money(m.fee)}</td><td>${money(p)}</td><td><span class="pill ${d===0?'paid':(isDueNow(m)?'due':'not-billed')}">${d===0?'পরিশোধিত':(isDueNow(m)?'Due · '+money(d):'বিল হয়নি')}</span></td><td>${esc(displayDueDate(m))}</td><td><div class="actions"><button class="green" onclick="openPay('${encodeURIComponent(m.id)}')" ${d===0?'disabled':''}>জমা</button>${activeRole==='admin'?`<button class="secondary" onclick="editMember('${encodeURIComponent(m.id)}')">Edit</button><button class="danger" onclick="deleteMember('${encodeURIComponent(m.id)}')">Delete</button>`:''}</div></td></tr>`}).join('');
 $('history').innerHTML=[...db.payments].reverse().slice(0,100).map(p=>`<tr><td>${esc(p.date||'—')}</td><td>${esc(p.memberId)}</td><td>${esc(p.period)}</td><td>${money(p.amount)}</td><td>${esc(p.note)}</td><td>${esc(p.by)}</td></tr>`).join('');
 $('pendingCount').textContent=(db.pendingPayments||[]).length+'টি অপেক্ষমাণ';$('pendingEmpty').classList.toggle('hidden',(db.pendingPayments||[]).length>0);$('pendingRows').innerHTML=(db.pendingPayments||[]).map((p,i)=>`<tr><td>${esc(p.date||'—')}</td><td>${esc(p.memberId)}</td><td>${esc(p.period)}</td><td>${money(p.amount)}</td><td>${esc(p.note||'—')}</td><td>${esc(p.by||'STAFF')}</td><td><div class="actions"><button class="green" onclick="approvePayment(${i})">Approve</button><button class="danger" onclick="rejectPayment(${i})">Reject</button></div></td></tr>`).join('')}
 function resetForm(){editing=null;$('memberForm').reset();$('memberId').disabled=false;$('monthlyFee').value=500;$('previousDue').value=0;$('openingPaid').value=0;$('formTitle').textContent='➕ নতুন সদস্য যোগ করুন'}
