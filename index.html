@@ -53,18 +53,22 @@ function paidFor(id){return db.payments.filter(p=>p.memberId===id&&p.period===cu
 function totalPaidFor(id){return db.payments.filter(p=>p.memberId===id).reduce((s,p)=>s+Number(p.amount||0),0)}
 function monthKey(y,m){return y+'-'+String(m+1).padStart(2,'0')}
 function billCycleCount(m){
+ // Count each monthly bill only after that month's personal due day.
  const today=new Date(), nowKey=monthKey(today.getFullYear(),today.getMonth());
  const baseKey=(m.month&&/^\d{4}-\d{2}$/.test(m.month))?m.month:((m.dueDate||nowKey).slice(0,7));
  if(baseKey>nowKey)return 0;
  const day=Number((m.dueDate||'').slice(8,10))||1;
  const [by,bm]=baseKey.split('-').map(Number);
  const months=(today.getFullYear()-by)*12+(today.getMonth()+1-bm);
- if(months<=0)return 0;
+ if(months<0)return 0;
  const lastDay=new Date(today.getFullYear(),today.getMonth()+1,0).getDate();
- return today.getDate()<Math.min(day,lastDay)?months-1:months;
+ const dueDay=Math.min(day,lastDay);
+ // Past months are counted; add this month only when its due day has arrived.
+ return Math.max(0,months+(today.getDate()>=dueDay?1:0));
 }
 function dueFor(m){return Math.max(0,Number(m.previousDue||0)+Number(m.fee||0)*billCycleCount(m)-totalPaidFor(m.id))}
-function isDueNow(m){return billCycleCount(m)>0&&dueFor(m)>0}
+// Previous outstanding balances remain due even before the next monthly due date.
+function isDueNow(m){return dueFor(m)>0}
 function displayDueDate(m){
  const today=new Date(),day=Number((m.dueDate||'').slice(8,10))||1;
  let y=today.getFullYear(),mo=today.getMonth();
