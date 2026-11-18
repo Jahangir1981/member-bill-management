@@ -216,9 +216,24 @@ async function login(){
 function logout(){cloudReady=false;if(pendingUnsub)pendingUnsub();if(mainUnsub)mainUnsub();pendingUnsub=mainUnsub=null;activeRole=null;auth.signOut();$('app').classList.add('hidden');$('loginScreen').classList.remove('hidden');$('password').value='';}
 function chooseRole(){ $('username').value=ADMIN_EMAIL;$('password').value='';showLoginError(''); }
 async function savePayment(e){
- e.preventDefault();let amount=+$('payAmount').value,m=db.members.find(x=>x.id===payingMember);if(!m||amount<=0)return;
+ e.preventDefault();
+ let amount=+$('payAmount').value,m=db.members.find(x=>x.id===payingMember);
+ if(!m||amount<=0)return;
  let entry={memberId:m.id,period:currentMonth,amount,date:new Date().toISOString().slice(0,10),note:$('payNote').value,by:activeRole.toUpperCase(),uid:auth.currentUser.uid};
- try{if(activeRole==='staff'){await cloud.collection('pendingPayments').add(entry);alert('জমা Admin অনুমোদনের জন্য পাঠানো হয়েছে।');}else{db.payments.push(entry);persist();} $('payDialog').close();render();}catch(err){alert('পেমেন্ট সংরক্ষণ হয়নি: '+err.message);}
+ try{
+  if(activeRole==='staff'){
+   await cloud.collection('pendingPayments').add(entry);
+   alert('জমা Admin অনুমোদনের জন্য পাঠানো হয়েছে। অনুমোদনের আগে এটি পরিশোধিত হিসাবে যোগ হবে না।');
+  }else{
+   const oldLength=db.payments.length;
+   db.payments.push(entry);
+   try{await persist();}
+   catch(saveError){db.payments.splice(oldLength);localStorage.setItem(KEY,JSON.stringify(db));throw saveError;}
+   alert('জমা Firebase-এ সংরক্ষিত হয়েছে।');
+  }
+  $('payDialog').close();
+  render();
+ }catch(err){alert('পেমেন্ট সংরক্ষণ হয়নি: '+(err.message||err));}
 }
 async function approvePayment(i){if(activeRole!=='admin')return;let p=db.pendingPayments[i];if(!p)return;try{db.payments.push({...p,approvedBy:'ADMIN',approvedAt:new Date().toISOString()});delete db.payments[db.payments.length-1]._docId;await persist();await cloud.collection('pendingPayments').doc(p._docId).delete();alert('Staff জমা অনুমোদিত হয়েছে।');}catch(e){alert('Approve হয়নি: '+e.message);}}
 async function rejectPayment(i){if(activeRole!=='admin')return;let p=db.pendingPayments[i];if(!p||!confirm('এই Staff জমাটি বাতিল করবেন?'))return;try{await cloud.collection('pendingPayments').doc(p._docId).delete();alert('জমাটি বাতিল করা হয়েছে।');}catch(e){alert('বাতিল করা যায়নি: '+e.message);}}
